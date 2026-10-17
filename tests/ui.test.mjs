@@ -31,7 +31,7 @@ test('team visuals stop on blocked and cancelled missions; narration does not de
  assert.match(get('agent-errands').className,/agent-working/);
  context.mission.status='blocked';context.mission.error='Provider rate limit reached';
  vm.runInContext('render(mission)',context);
- for(const key of ['grace','errands','reviewer','prism'])assert.doesNotMatch(get('agent-'+key).className,/agent-working/);
+ for(const key of ['grace','errands','reviewer'])assert.doesNotMatch(get('agent-'+key).className,/agent-working/);
  assert.doesNotMatch(get('team-stage').className,/is-active/);
  assert.match(get('team-message').textContent,/progress is saved/);
  assert.match(get('task-board').children[0].children[0].children[0].textContent,/PAUSED/);
@@ -43,14 +43,22 @@ test('team visuals stop on blocked and cancelled missions; narration does not de
  vm.runInContext("selectedAgent='reviewer';renderTeam(mission)",context);
  assert.match(get('team-message').textContent,/not proof/);
  context.mission.report={findings:[{claim:'According to the source',quote:'Example',url:'https://example.com',evidenceStatus:'Requires review'}],unknowns:['One unanswered question'],nextSteps:['Inspect source'],limitations:[],completionChecks:[{passed:false,label:'Final review pending'}]};
- context.mission.status='blocked';vm.runInContext("selectedAgent='prism';render(mission)",context);
- assert.equal(get('prism-state').textContent,'Provisional brief');
- assert.match(get('team-message').textContent,/provisional or needs review/);
+ context.mission.status='blocked';vm.runInContext("render(mission)",context);
+ assert.equal(get('prism-title').textContent,'Here’s what we know so far');
  assert.match(get('prism-summary').textContent,/1 cited findings, 1 listed open questions, and 1 next steps/);
  context.mission.status='complete';context.mission.report.completionChecks[0].passed=true;vm.runInContext('render(mission)',context);
- assert.equal(get('prism-state').textContent,'Brief ready');
+ assert.equal(get('prism-title').textContent,'Your brief is ready');
  assert.match(get('prism-summary').textContent,/workflow is complete/);
- assert.doesNotMatch(get('agent-prism').className,/agent-working/);
+
  context.mission.report.completionChecks=[];vm.runInContext('render(mission)',context);
  assert.match(get('prism-summary').textContent,/provisional or needs review/);
+});
+
+
+test('Prism lives only inside the conditionally visible report',async()=>{
+ const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8');
+ assert.doesNotMatch(html,/id="agent-prism"/);
+ const report=html.slice(html.indexOf('id="report" hidden'));
+ assert.match(report,/src="\/brand\/prism.png"/);
+ assert.match(report,/id="prism-summary"/);
 });

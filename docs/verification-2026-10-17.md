@@ -37,3 +37,8 @@ Validation: 36 offline tests, typecheck, and eve build passed. New regressions c
 Clue replaces the neutral reviewer symbol with the founder-requested original transparent robot detective artwork. Prism adds a fourth visible teammate as a deterministic report presenter, not a fourth model invocation or additional verification stage. He presents counts from the actual saved report and links to the findings; incomplete/legacy/blocked reports retain provisional or needs-review wording. No report means no results. Four-character layout uses two columns on phones. Both assets remain excluded from public code.
 
 37 offline tests pass, including assertions that Prism never claims workflow completion without a complete mission and all completion checks passing, and no character appears working while blocked. Character PNG routes and expected content types were checked locally. Browser/physical-device visual acceptance and live provider end-to-end acceptance remain pending. No live provider calls or budget-limit changes were introduced by these presentation changes.
+
+
+## Prism at report level — October 17
+
+Moved Prism artwork and report narration into the conditionally visible evidence report. The investigation room retains Grace, Errands, and Clue. Prism remains a deterministic presenter with no additional model call. A complete headline requires complete mission status and nonempty all-passing workflow checks. Provisional, blocked, and legacy reports retain cautious wording. Browser/physical-device visual acceptance remains pending.
