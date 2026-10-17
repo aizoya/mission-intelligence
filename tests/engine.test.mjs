@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp,rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Engine,checkFindings,validateTasks } from '../src/engine.mjs';
+import { Engine,checkFindings,validateTasks,selectEvidence } from '../src/engine.mjs';
 import { Store } from '../src/store.mjs';
 import { ProviderError,LiveProviders,parseJSON,requestJSON } from '../src/providers.mjs';
 const source={url:'https://example.org/careers',title:'Fictional fixture',text:'Our hiring process never requires applicants to pay an application fee.'};
@@ -14,7 +14,7 @@ class FixtureProviders {
  async reason(role){
   let value;
   if(role==='coordinator')value={tasks:[{question:'Check official policy',query:'Example official hiring policy'},{question:'Check advertised role',query:'Example current careers role'}]};
-  else if(role==='researcher')value={entityMatch:true,summary:'Fixture summary',gaps:[]};
+  else if(role==='researcher')value={entityMatch:true,sourceAssessments:[{index:0,relevant:true,official:true}],summary:'Fixture summary',gaps:[]};
   else {this.reviews++;value={findings:[{claim:'The fixture source says fees are not required.',sourceId:'s1',quote:source.text,kind:'fact'}],unknowns:['Private sender not authenticated.'],nextSteps:['Check official contact details.'],followups:this.reviews===1?[{question:'Investigate contradiction',query:'Example official payment warning'}]:[]};}
   return {value,usage:{total_tokens:20},model:'fixture-only'};
  }
@@ -30,7 +30,7 @@ test('resume blocked preflight from disk',async t=>{const p=new FixtureProviders
 test('reject invented citations and quotations',()=>{const c=checkFindings([{claim:'Claim',sourceId:'s9',quote:source.text,kind:'fact'},{claim:'Claim',sourceId:'s1',quote:'This quotation was invented by a model.',kind:'fact'}],[{...source,id:'s1'}]);assert.equal(c.accepted.length,0);assert.equal(c.rejected,2);});
 test('reject private and URL-based queries',()=>{for(const query of ['hello@example.org recruiter','https://example.org/link','phone 1234567890','bearer secret'])assert.throws(()=>validateTasks([{question:'Check',query}]));});
 test('enforce task count and objective limits',async t=>{assert.throws(()=>validateTasks([]));const {engine}=await setup(t);await assert.rejects(()=>engine.create('tiny'));});
-test('stop at model-call budget',async t=>{const {engine,store}=await setup(t,new FixtureProviders(),{modelCalls:1});const m=await engine.create('Investigate this fictional public claim.');await engine.run(m.id);const d=await store.get(m.id);assert.equal(d.status,'blocked');assert.equal(d.calls.model,1);assert.match(d.error,/budget/);});
+test('finalize an honest partial report at model-call budget',async t=>{const {engine,store}=await setup(t,new FixtureProviders(),{modelCalls:1});const m=await engine.create('Investigate this fictional public claim.');await engine.run(m.id);const d=await store.get(m.id);assert.equal(d.status,'needs_review');assert.equal(d.calls.model,1);assert.match(d.report.finalizationReason,/budget/);assert.ok(d.report.completionChecks.some(c=>!c.passed));});
 test('live calls require opt-in and both credentials',async()=>{await assert.rejects(()=>new LiveProviders({}).preflight(),/disabled/);await assert.rejects(()=>new LiveProviders({ALLOW_LIVE_CALLS:'true'}).preflight(),/credentials/);});
 test('upstream auth errors never expose response bodies',async()=>{await assert.rejects(()=>requestJSON('https://example.org',{},async()=>({ok:false,status:401,text:async()=>'SECRET'})),e=>e.message==='Provider returned HTTP 401'&&!e.retryable);});
 test('malformed model JSON fails closed',()=>{assert.throws(()=>parseJSON('not json'));assert.deepEqual(parseJSON('```json\n{"ok":true}\n```'),{ok:true});});
@@ -137,4 +137,66 @@ test('repeated blocks increase persisted cooldown and retain provider quota diag
  assert.equal(d.rateLimitBlocks,2);assert.ok(Date.parse(d.retryAt)>=before+120000);assert.equal(requests,2);
  await engine.run(m.id);assert.equal(requests,2);
  assert.equal(d.events.filter(e=>e.type==='provider_response').length,2);
+});
+
+test('mixed search results admit only individually relevant official sources when requested',async t=>{
+ const p=new FixtureProviders(),original=p.reason.bind(p);
+ p.search=async()=>[source,{url:'https://wrong-company.example',text:'Wrong-industry company source',title:'Wrong company'},{url:'https://commentary.example',text:'Third-party commentary',title:'Commentary'}];
+ p.reason=async(role,...args)=>{
+  const answer=await original(role,...args);
+  if(role==='researcher')answer.value.sourceAssessments=[{index:0,relevant:true,official:true},{index:1,relevant:false,official:true},{index:2,relevant:true,official:false}];
+  return answer;
+ };
+ const {engine,store}=await setup(t,p);const m=await engine.create('Compare official sources for a public organization.');
+ await engine.run(m.id);const d=await store.get(m.id);
+ assert.equal(d.sources.length,1);assert.equal(d.sources[0].url,source.url);
+ assert.ok(d.tasks.every(t=>t.rejectedSources.length===2));
+ assert.ok(d.sources[0].assessment.method.includes('not independent'));
+});
+
+test('missing, duplicate or uncertain source assessments fail closed',()=>{
+ assert.equal(selectEvidence([source],undefined,true)[0].eligible,false);
+ assert.equal(selectEvidence([source],[{index:0,relevant:true,official:'true'}],true)[0].eligible,false);
+ assert.equal(selectEvidence([source],[{index:0,relevant:true,official:true},{index:0,relevant:false}],true)[0].eligible,false);
+ assert.equal(selectEvidence([source],[{index:0,relevant:true,official:false}],false)[0].eligible,true);
+});
+
+test('marketing guarantees are always attributed as source claims, including partial-report revalidation',()=>{
+ const marketing={...source,id:'s1',text:'We promise no hallucinations in our AI output.'};
+ const result=checkFindings([{claim:'The product has no hallucinations.',sourceId:'s1',quote:marketing.text,kind:'fact'}],[marketing]);
+ assert.equal(result.accepted[0].kind,'source_claim');
+ assert.match(result.accepted[0].claim,/^According to the cited source:/);
+ assert.match(result.accepted[0].evidenceStatus,/accuracy.*require review/);
+ assert.deepEqual(checkFindings(result.accepted,[marketing]).accepted,result.accepted);
+});
+
+test('do not start optional recursion without enough attempts reserved for final review',async t=>{
+ const {engine,store,p}=await setup(t,new FixtureProviders(),{modelCalls:6});
+ const m=await engine.create('Investigate a fictional public claim.');await engine.run(m.id);const d=await store.get(m.id);
+ assert.equal(d.status,'needs_review');assert.equal(d.calls.model,4);assert.equal(d.tasks.length,2);
+ assert.ok(d.report.unknowns.some(x=>x.includes('reserved final-review budget')));assert.equal(p.reviews,1);
+});
+
+test('exhausted saved mission finalizes without preflight or any further provider call',async t=>{
+ const {engine,store,p}=await setup(t);const m=await engine.create('Investigate a fictional public claim.');
+ m.status='blocked';m.phase='verify';m.calls.model=14;
+ m.tasks=[{question:'Unfinished follow-up',status:'running'}];
+ await store.save(m);p.preflight=async()=>{throw Error('Must not contact providers');};
+ await engine.run(m.id);const d=await store.get(m.id);
+ assert.equal(d.status,'needs_review');assert.equal(d.phase,'finished');assert.equal(d.calls.model,14);
+ assert.ok(d.report.unknowns.includes('Research incomplete: Unfinished follow-up'));
+ assert.equal(d.report.findings.length,0);assert.ok(d.report.completionChecks.some(c=>!c.passed));
+});
+
+test('review timeouts preserve prior findings as an explicitly incomplete final report',async t=>{
+ const p=new FixtureProviders(),original=p.reason.bind(p);
+ p.reason=async(role,...args)=>{
+  if(role==='challenger'&&p.reviews===1)throw new ProviderError('Provider connection failed or timed out',true);
+  return original(role,...args);
+ };
+ const {engine,store}=await setup(t,p);const m=await engine.create('Investigate a fictional public claim.');
+ await engine.run(m.id);const d=await store.get(m.id);
+ assert.equal(d.status,'needs_review');assert.equal(d.report.findings.length,1);
+ assert.match(d.report.finalizationReason,/bounded retries/);
+ assert.ok(d.report.completionChecks.some(c=>c.label.includes('Final review')&&!c.passed));
 });
