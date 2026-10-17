@@ -29,7 +29,7 @@ const server=createServer(async(req,res)=>{
     const host=req.headers.host||'';
     if(![`127.0.0.1:${port}`,`localhost:${port}`].includes(host))return json(res,403,{error:'Local development host only'});
     const url=new URL(req.url,`http://${host}`);
-    if(req.method==='GET'&&['/brand/symbol.png','/brand/wordmark.png','/brand/aizoya-master-logo.jpeg','/brand/aizoya-wordmark.svg','/brand/grace.webp','/brand/errands.png'].includes(url.pathname)) {
+    if(req.method==='GET'&&['/brand/symbol.png','/brand/wordmark.png','/brand/aizoya-master-logo.jpeg','/brand/aizoya-wordmark.svg','/brand/grace.webp','/brand/errands.png','/brand/clue.png'].includes(url.pathname)) {
       res.setHeader('Content-Type',url.pathname.endsWith('.webp')?'image/webp':url.pathname.endsWith('.svg')?'image/svg+xml':url.pathname.endsWith('.jpeg')?'image/jpeg':'image/png');
       return res.end(await readFile(`${root}public${url.pathname}`));
     }

@@ -6,7 +6,7 @@ async function status(){try{const s=await api('/api/status');$('provider-status'
 function list(id,items){$(id).replaceChildren(...items.map(x=>text('li',x)));}
 let selectedAgent='grace';
 let taskSignature='';
-const agents={grace:{name:'Grace',role:'Your guide',description:'I coordinate the investigation and help you understand what the evidence supports.'},errands:{name:'Errands',role:'Evidence explorer',description:'I gather public sources and assess their relevance to your question.'},reviewer:{name:'Reviewer',role:'Evidence challenger',description:'I review captured evidence, check quotations, and identify gaps. A matched quote is not proof that a claim is true.'}};
+const agents={grace:{name:'Grace',role:'Your guide',description:'I coordinate the investigation and help you understand what the evidence supports.'},errands:{name:'Errands',role:'Evidence explorer',description:'I gather public sources and assess their relevance to your question.'},reviewer:{name:'Clue',role:'Evidence detective',description:'Let’s look a little closer. I review captured evidence, check quotations, and identify gaps. A matched quote is not proof that a claim is true.'}};
 function teamView(m){
  const active=m&&['queued','running'].includes(m.status);
  const states={grace:'Ready',errands:'Ready',reviewer:'Ready'};
@@ -17,7 +17,7 @@ function teamView(m){
    states.grace='Coordinating';states.errands='Waiting';states.reviewer='Waiting';
    if(working==='grace'){states.grace='Planning';message='Let’s turn your question into a few focused investigations.';}
    if(working==='errands'){states.errands='Exploring';message='Errands is following the sources. We’ll keep what fits your question and flag what doesn’t.';}
-   if(working==='reviewer'){states.errands='Research paused';states.reviewer='Reviewing';message='Let’s challenge what we found. The reviewer is checking the evidence and looking for gaps.';}
+   if(working==='reviewer'){states.errands='Research paused';states.reviewer='Reviewing';message='Let’s challenge what we found. Clue is checking the evidence and looking for gaps.';}
   }else if(m.status==='blocked'){
    Object.keys(states).forEach(k=>states[k]='Paused');
    message='We’ve hit a blocker. Your progress is saved. '+(m.error||'Review the activity details before continuing.');
