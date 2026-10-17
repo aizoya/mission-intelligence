@@ -30,3 +30,10 @@ Validation: 36 offline tests, typecheck, and eve build passed. New regressions c
 - Movement can be paused; CSS respects reduced-motion preferences. Responsive layouts are authored; physical-device/browser visual acceptance remains pending.
 - Original Grace welcome artwork: AIZOYA branch feature/grace-website-guide-20260927, blob ed4ff013fc94986d5de495ed57e9697d1d6f5e57. Errands greeting: Errands_Offline_Prototype_2026-10-07.zip, SHA-256 701876f3ec0e539f1190ceaa0b1120c29dfcb93fa4827f61f801f6415b307e31 matches the company checkpoint. Logo blob 06fc8cec62d79b5855b6610e6a89d43829c92f7a and wordmark blob 4df52b0104056df589b4964ea067c5fe6b63a5db used unchanged. Artwork stays ignored/excluded from public code.
 - Offline tests: 37 passed; typecheck/build passed. Browser checks could not execute: local Chromium absent, its official download failed, cloud browser cannot reach the local preview port. No browser PASS claimed. Live provider completion remains unverified while Crusoe HTTP 429 is unresolved. Zero live provider requests made for this UI work.
+
+
+## Clue and Prism presentation characters — October 17
+
+Clue replaces the neutral reviewer symbol with the founder-requested original transparent robot detective artwork. Prism adds a fourth visible teammate as a deterministic report presenter, not a fourth model invocation or additional verification stage. He presents counts from the actual saved report and links to the findings; incomplete/legacy/blocked reports retain provisional or needs-review wording. No report means no results. Four-character layout uses two columns on phones. Both assets remain excluded from public code.
+
+37 offline tests pass, including assertions that Prism never claims workflow completion without a complete mission and all completion checks passing, and no character appears working while blocked. Character PNG routes and expected content types were checked locally. Browser/physical-device visual acceptance and live provider end-to-end acceptance remain pending. No live provider calls or budget-limit changes were introduced by these presentation changes.

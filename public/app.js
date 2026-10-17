@@ -6,30 +6,37 @@ async function status(){try{const s=await api('/api/status');$('provider-status'
 function list(id,items){$(id).replaceChildren(...items.map(x=>text('li',x)));}
 let selectedAgent='grace';
 let taskSignature='';
-const agents={grace:{name:'Grace',role:'Your guide',description:'I coordinate the investigation and help you understand what the evidence supports.'},errands:{name:'Errands',role:'Evidence explorer',description:'I gather public sources and assess their relevance to your question.'},reviewer:{name:'Clue',role:'Evidence detective',description:'Let’s look a little closer. I review captured evidence, check quotations, and identify gaps. A matched quote is not proof that a claim is true.'}};
+const agents={grace:{name:'Grace',role:'Your guide',description:'I coordinate the investigation and help you understand what the evidence supports.'},errands:{name:'Errands',role:'Evidence explorer',description:'I gather public sources and assess their relevance to your question.'},prism:{name:'Prism',role:'Results presenter',description:'Let’s make sense of what we found. I present the existing report, keeping cited findings, unanswered questions, and next steps together. I don’t add a separate model assessment.'},reviewer:{name:'Clue',role:'Evidence detective',description:'Let’s look a little closer. I review captured evidence, check quotations, and identify gaps. A matched quote is not proof that a claim is true.'}};
 function teamView(m){
  const active=m&&['queued','running'].includes(m.status);
- const states={grace:'Ready',errands:'Ready',reviewer:'Ready'};
+ const states={grace:'Ready',errands:'Ready',reviewer:'Ready',prism:'Waiting for a report'};
  let working=null,message='Hi! What are we curious about today? Give me a question and we’ll explore it together.';
  if(m){
   if(active){
    working=m.phase==='research'?'errands':m.phase==='verify'?'reviewer':'grace';
-   states.grace='Coordinating';states.errands='Waiting';states.reviewer='Waiting';
+   states.grace='Coordinating';states.errands='Waiting';states.reviewer='Waiting';states.prism=m.report?'Provisional brief':'Waiting for review';
    if(working==='grace'){states.grace='Planning';message='Let’s turn your question into a few focused investigations.';}
    if(working==='errands'){states.errands='Exploring';message='Errands is following the sources. We’ll keep what fits your question and flag what doesn’t.';}
    if(working==='reviewer'){states.errands='Research paused';states.reviewer='Reviewing';message='Let’s challenge what we found. Clue is checking the evidence and looking for gaps.';}
   }else if(m.status==='blocked'){
    Object.keys(states).forEach(k=>states[k]='Paused');
+   states.prism=m.report?'Provisional brief':'Paused';
    message='We’ve hit a blocker. Your progress is saved. '+(m.error||'Review the activity details before continuing.');
    if(m.retryAt)message+=' Earliest manual retry: '+new Date(m.retryAt).toLocaleTimeString()+'. This is not a guarantee of provider availability.';
   }else if(m.status==='cancelled'){
    Object.keys(states).forEach(k=>states[k]='Stopped');message='We’ve stopped here. Your saved evidence is still available to review.';
   }else{
    Object.keys(states).forEach(k=>states[k]='At rest');
+   states.prism=m.report?(m.status==='complete'?'Brief ready':'Needs review'):'No report';
    message=m.status==='complete'?'Your evidence brief is ready. Let’s review the findings and decide what to check next.':'We have a partial brief, with open questions. Let’s review those before making a decision.';
   }
  }
  return {states,working,message,active:!!active};
+}
+function prismSummary(m){
+ if(!m?.report)return 'Let’s make sense of what we find. I’m waiting for a report; no results are ready to present yet.';
+ const r=m.report;const complete=m.status==='complete'&&r.completionChecks?.length>0&&r.completionChecks.every(c=>c.passed===true);
+ return `${complete?'The workflow is complete.':'This brief is provisional or needs review.'} We have ${r.findings.length} cited findings, ${r.unknowns.length} listed open questions, and ${r.nextSteps.length} next steps. Inspect each citation before relying on a claim.`;
 }
 function renderTeam(m){
  const v=teamView(m);
@@ -42,7 +49,7 @@ function renderTeam(m){
  }
  $('speaker').textContent=agents[selectedAgent].name.toUpperCase()+' / '+agents[selectedAgent].role.toUpperCase();
  // Authored narration describes saved workflow state, never private model reasoning.
- $('team-message').textContent=selectedAgent==='grace'?v.message:agents[selectedAgent].description;
+ $('team-message').textContent=selectedAgent==='grace'?v.message:selectedAgent==='prism'?prismSummary(m):agents[selectedAgent].description;
  const task=(m?.tasks||[]).find(t=>t.status==='running')||(m?.tasks||[]).find(t=>t.status==='pending');
  $('agent-detail').textContent=selectedAgent==='errands'&&task?'Current assignment: '+task.question:selectedAgent==='reviewer'&&m?.report?`${m.report.findings.length} quoted findings in the current brief. Open the report to inspect each citation.`:m?'Your question: '+m.objective:'Select a teammate to see their role and current work.';
  renderTasks(m);
@@ -77,6 +84,7 @@ renderTeam(null);
 
 function render(m){
  renderTeam(m);
+ $('prism-summary').textContent=prismSummary(m);
  current=m;$('download').hidden=false;$('state').textContent=m.status.replaceAll('_',' ').toUpperCase();
  $('start').disabled=['queued','running'].includes(m.status);$('resume').hidden=m.status!=='blocked';
  $('stop').hidden=!['queued','running'].includes(m.status);$('stop').disabled=false;
