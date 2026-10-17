@@ -1,0 +1,1 @@
+This application uses the eve scaffold and npm dependencies recorded in package-lock.json; their individual licenses apply. No original AIZOYA brand artwork or copied Crusoe sponsor reference is included in this code-only tree. The sponsor skill can be obtained from its official repository; see README. No sponsor endorsement is claimed.

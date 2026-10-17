@@ -1,0 +1,19 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.eve/
+.output/
+.data/
+coverage/
+*.log
+.vercel/
+.next/
+.nitro/
+dist/
+.DS_Store
+*.tsbuildinfo
+
+# Private optional brand files are never included in the code release.
+public/brand/*
+!public/brand/README.md
