@@ -41,3 +41,15 @@ test('truncated reasoning is never accepted as a report',async()=>{
   const p=new LiveProviders(env,async()=>response({choices:[{finish_reason:'length',message:{content:'{"findings":[]}'}}]}));
   await assert.rejects(()=>p.reason('challenger','Fixture',{}),/truncated/);
 });
+
+test('HTTP 429 is not rapidly retried and carries a conservative Retry-After cooldown',async()=>{
+ const {requestJSON}=await import('../src/providers.mjs');
+ for(const header of ['120',new Date(Date.now()+180000).toUTCString(),null,'invalid']) {
+  const before=Date.now();
+  await assert.rejects(()=>requestJSON('https://example.org',{},async()=>({ok:false,status:429,headers:{get:()=>header}})),e=>{
+   assert.equal(e.status,429);assert.equal(e.retryable,false);assert.ok(Date.parse(e.retryAt)>=before+60000);
+   if(header==='120')assert.ok(Date.parse(e.retryAt)>=before+120000);
+   return true;
+  });
+ }
+});

@@ -6,14 +6,14 @@ async function status(){try{const s=await api('/api/status');$('provider-status'
 function list(id,items){$(id).replaceChildren(...items.map(x=>text('li',x)));}
 function render(m){
  current=m;$('download').hidden=false;$('state').textContent=m.status.replaceAll('_',' ').toUpperCase();
- $('start').disabled=['queued','running'].includes(m.status);$('resume').hidden=!['blocked','running','queued'].includes(m.status);
+ $('start').disabled=['queued','running'].includes(m.status);$('resume').hidden=m.status!=='blocked';
  $('stop').hidden=!['queued','running'].includes(m.status);$('stop').disabled=false;
  $('mission-note').textContent=`Mission ${m.id.slice(0,8)} · ${m.mode} provider mode · saved ${m.updatedAt?new Date(m.updatedAt).toLocaleTimeString():'now'}`;
  $('search-count').textContent=m.calls.search;$('model-count').textContent=m.calls.model;$('source-count').textContent=m.sources.length;
  $('timeline').replaceChildren(...m.events.map(e=>{const li=text('li',e.message);li.className=`event-${e.type}`;li.prepend(text('time',`${new Date(e.at).toLocaleTimeString()} · ${e.type}${e.controlled?' · CONTROLLED TEST FAILURE':''}`));if(e.model)li.append(text('div',e.model));if(e.error)li.append(text('div',e.error));return li;}));
  $('error').textContent=m.error||'';
  $('report').hidden=!m.report;
- if(m.report)list('completion-checks',(m.report.completionChecks||[]).map(c=>`${c.passed?'PASS':'NEEDS REVIEW'} — ${c.label}`));
+ if(m.report)list('completion-checks',(m.report.completionChecks?.length?m.report.completionChecks:[{passed:false,label:'Completion checks unavailable; report requires review'}]).map(c=>`${c.passed?'PASS':'NEEDS REVIEW'} — ${c.label}`));
  if(m.report){$('findings').replaceChildren(...m.report.findings.map(f=>{const d=document.createElement('article');d.className='finding';d.append(text('p',f.claim),text('blockquote',f.quote));const a=text('a',f.url);a.href=f.url;a.target='_blank';a.rel='noopener noreferrer';d.append(a,text('small',f.evidenceStatus));return d;}));list('unknowns',m.report.unknowns.length?m.report.unknowns:['No unresolved questions reported by the model. This is not a guarantee of safety.']);list('next-steps',m.report.nextSteps);$('limitations').textContent=m.report.limitations.join(' ');}
  if(!['running','queued'].includes(m.status)){clearInterval(polling);polling=null;}
 }

@@ -14,7 +14,7 @@ class FixtureProviders {
  async reason(role){
   let value;
   if(role==='coordinator')value={tasks:[{question:'Check official policy',query:'Example official hiring policy'},{question:'Check advertised role',query:'Example current careers role'}]};
-  else if(role==='researcher')value={summary:'Fixture summary',gaps:[]};
+  else if(role==='researcher')value={entityMatch:true,summary:'Fixture summary',gaps:[]};
   else {this.reviews++;value={findings:[{claim:'The fixture source says fees are not required.',sourceId:'s1',quote:source.text,kind:'fact'}],unknowns:['Private sender not authenticated.'],nextSteps:['Check official contact details.'],followups:this.reviews===1?[{question:'Investigate contradiction',query:'Example official payment warning'}]:[]};}
   return {value,usage:{total_tokens:20},model:'fixture-only'};
  }
@@ -90,4 +90,35 @@ test('unmetered failed requests are explicitly marked unknown',async t=>{
  const {engine,store}=await setup(t,p);const m=await engine.create('Research this proposed product market.');
  await engine.run(m.id);const d=await store.get(m.id);
  assert.equal(d.status,'blocked');assert.equal(d.calls.unknownUsageAttempts,3);assert.equal(d.calls.tokens,0);
+});
+
+test('wrong or unconfirmed organization is quarantined instead of published as evidence',async t=>{
+ const p=new FixtureProviders(),original=p.reason.bind(p);
+ p.reason=async(role,...args)=>role==='researcher'?{value:{entityMatch:false,summary:'Same-name gas sensor company',gaps:['Wrong industry']},usage:{total_tokens:20},model:'fixture'}:original(role,...args);
+ const {engine,store}=await setup(t,p);const m=await engine.create('Compare business research software for vendor due diligence.');
+ await engine.run(m.id);const d=await store.get(m.id);
+ assert.equal(d.status,'needs_review');assert.equal(d.sources.length,0);assert.equal(d.report.findings.length,0);
+ assert.ok(d.tasks.every(x=>x.status==='failed'&&x.rejectedSources.length===1));
+});
+
+test('rate limit pauses entire workflow, enforces cooldown and reuses captured search on resume',async t=>{
+ const p=new FixtureProviders(),original=p.reason.bind(p);let limited=true,researcherCalls=0;
+ p.reason=async(role,...args)=>{
+  if(role==='researcher'){researcherCalls++;if(limited){const e=new ProviderError('Provider returned HTTP 429');e.status=429;e.retryAt=new Date(Date.now()+60000).toISOString();throw e;}}
+  return original(role,...args);
+ };
+ const {engine,store}=await setup(t,p);const m=await engine.create('Investigate fictional company official hiring policy.');
+ await engine.run(m.id);let d=await store.get(m.id);
+ assert.equal(d.status,'blocked');assert.equal(researcherCalls,1);assert.equal(p.reviews,0);assert.equal(p.searches,1);
+ assert.equal(d.tasks[0].status,'pending');assert.ok(d.tasks[0].capturedSources.length);assert.ok(d.retryAt);
+ const calls=d.calls.model;await engine.run(m.id);assert.equal((await store.get(m.id)).calls.model,calls);
+ d.retryAt=new Date(0).toISOString();await store.save(d);limited=false;await engine.run(m.id);d=await store.get(m.id);
+ assert.equal(d.status,'needs_review');assert.equal(p.searches,3);assert.equal(d.retryAt,undefined);
+});
+
+test('provisional report has explicit failed completion checks if later review rate-limits',async t=>{
+ const p=new FixtureProviders(),original=p.reason.bind(p);
+ p.reason=async(role,...args)=>{if(role==='challenger'&&p.reviews===1){const e=new ProviderError('Provider returned HTTP 429');e.status=429;throw e;}return original(role,...args);};
+ const {engine,store}=await setup(t,p);const m=await engine.create('Investigate fictional company official hiring policy.');await engine.run(m.id);const d=await store.get(m.id);
+ assert.equal(d.status,'blocked');assert.ok(d.report.completionChecks.length);assert.ok(d.report.completionChecks.some(c=>!c.passed));
 });

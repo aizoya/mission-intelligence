@@ -8,7 +8,15 @@ export async function requestJSON(url, options, fetcher = fetch) {
   catch { throw new ProviderError('Provider connection failed or timed out', true); }
   if (!response.ok) {
     // Do not log bodies: upstream errors may contain credentials or private prompts.
-    throw new ProviderError(`Provider returned HTTP ${response.status}`, [408,429,500,502,503,504].includes(response.status));
+    const error = new ProviderError(`Provider returned HTTP ${response.status}`, [408,500,502,503,504].includes(response.status));
+    error.status = response.status;
+    if (response.status === 429) {
+      const header = response.headers?.get('retry-after');
+      const seconds = header == null || header.trim() === '' ? NaN : Number(header);
+      const date = header ? Date.parse(header) : NaN;
+      error.retryAt = new Date(Number.isFinite(seconds) && seconds >= 0 ? Date.now() + Math.max(60000, seconds * 1000) : Math.max(Date.now() + 60000, Number.isFinite(date) ? date : 0)).toISOString();
+    }
+    throw error;
   }
   try { return await response.json(); }
   catch { throw new ProviderError('Provider returned invalid JSON', true); }
