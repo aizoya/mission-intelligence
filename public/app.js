@@ -92,6 +92,8 @@ function render(m){
  $('timeline').replaceChildren(...m.events.map(e=>{const li=text('li',e.message);li.className=`event-${e.type}`;li.prepend(text('time',`${new Date(e.at).toLocaleTimeString()} · ${e.type}${e.controlled?' · CONTROLLED TEST FAILURE':''}`));if(e.model)li.append(text('div',e.model));if(e.error)li.append(text('div',e.error));return li;}));
  $('error').textContent=m.error||'';
  $('report').hidden=!m.report;
+ $('report-jump').hidden=!m.report;
+ $('checks-summary').textContent=m.report?.completionChecks?.length?`Workflow checks · ${m.report.completionChecks.filter(c=>c.passed===true).length}/${m.report.completionChecks.length} passed · inspect details`:'Workflow checks unavailable · needs review';
  if(m.report)list('completion-checks',(m.report.completionChecks?.length?m.report.completionChecks:[{passed:false,label:'Completion checks unavailable; report requires review'}]).map(c=>`${c.passed?'PASS':'NEEDS REVIEW'} — ${c.label}`));
  if(m.report){$('findings').replaceChildren(...m.report.findings.map(f=>{const d=document.createElement('article');d.className='finding';d.append(text('p',f.claim),text('blockquote',f.quote));const a=text('a',f.url);a.href=f.url;a.target='_blank';a.rel='noopener noreferrer';d.append(a,text('small',f.evidenceStatus));return d;}));list('unknowns',m.report.unknowns.length?m.report.unknowns:['No unresolved questions reported by the model. This is not a guarantee of safety.']);list('next-steps',m.report.nextSteps);$('limitations').textContent=m.report.limitations.join(' ');}
  if(!['running','queued'].includes(m.status)){clearInterval(polling);polling=null;}

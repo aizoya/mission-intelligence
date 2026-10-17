@@ -42,3 +42,7 @@ Clue replaces the neutral reviewer symbol with the founder-requested original tr
 ## Prism at report level — October 17
 
 Moved Prism artwork and report narration into the conditionally visible evidence report. The investigation room retains Grace, Errands, and Clue. Prism remains a deterministic presenter with no additional model call. A complete headline requires complete mission status and nonempty all-passing workflow checks. Provisional, blocked, and legacy reports retain cautious wording. Browser/physical-device visual acceptance remains pending.
+
+## Ergonomic layout pass — October 17
+
+Moved the investigation room into the activity column alongside the question composer on desktop, shortened the introductory hero and character area, added accessible sticky section links, and collapsed detailed workflow checks behind a visible pass-count summary. Evidence citations and unresolved questions remain available. Report navigation appears only when a saved report exists. No automatic scrolling or provider calls. Offline behavior checks are not a substitute for pending browser/device visual acceptance.
