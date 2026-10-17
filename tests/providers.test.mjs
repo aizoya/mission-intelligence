@@ -53,3 +53,20 @@ test('HTTP 429 is not rapidly retried and carries a conservative Retry-After coo
   });
  }
 });
+
+test('rate diagnostics allow numeric quota headers and never read private error bodies',async()=>{
+ const {requestJSON}=await import('../src/providers.mjs');let seen;
+ const headers=new Map([['x-ratelimit-limit-tokens','500000'],['x-ratelimit-remaining-tokens','0'],['x-ratelimit-remaining-requests','secret-credential'],['retry-after','120'],['authorization','Bearer SECRET']]);
+ await assert.rejects(()=>requestJSON('https://example.org',{},async()=>({ok:false,status:429,headers:{get:key=>headers.get(key)},json:async()=>{throw Error('Must not read body');}}),{provider:'Crusoe',operation:'reason',model,role:'researcher',onResponse:d=>{seen=d;}}),e=>{
+  assert.equal(e.diagnostic,seen);assert.equal(e.diagnostic.provider,'Crusoe');assert.equal(e.diagnostic.role,'researcher');
+  assert.deepEqual(e.diagnostic.rateLimits,{'x-ratelimit-limit-tokens':500000,'x-ratelimit-remaining-tokens':0});
+  assert.ok(!JSON.stringify(e.diagnostic).includes('SECRET'));return true;
+ });
+});
+
+test('successful responses also expose quota diagnostics and extreme retry headers remain safe',async()=>{
+ const {requestJSON}=await import('../src/providers.mjs');let seen;
+ await requestJSON('https://example.org',{},async()=>({ok:true,status:200,headers:{get:key=>key==='x-ratelimit-remaining-requests'?'29':null},json:async()=>({ok:true})}),{provider:'You.com',operation:'search',onResponse:d=>{seen=d;}});
+ assert.equal(seen.status,200);assert.equal(seen.rateLimits['x-ratelimit-remaining-requests'],29);
+ await assert.rejects(()=>requestJSON('https://example.org',{},async()=>({ok:false,status:429,headers:{get:()=> '9'.repeat(310)}})),e=>e.status===429&&Number.isFinite(Date.parse(e.retryAt)));
+});
