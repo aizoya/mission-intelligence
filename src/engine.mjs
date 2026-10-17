@@ -39,8 +39,8 @@ function strings(value, max = 8) { return Array.isArray(value) ? value.filter(x=
 class StopRequested extends Error { constructor(){super('Customer stopped the investigation. An in-flight request may have completed and incurred usage.');} }
 
 export class Engine {
-  constructor(store, providers, limits = {}) {
-    this.store = store; this.providers = providers; this.active = new Set(); this.stops = new Set();
+  constructor(store, providers, limits = {}, { sleep = ms=>new Promise(resolve=>setTimeout(resolve,ms)) } = {}) {
+    this.sleep = sleep; this.store = store; this.providers = providers; this.active = new Set(); this.stops = new Set();
     this.limits = { modelCalls:14, searchCalls:8, tokens:60000, ...limits };
   }
   async create(objective, { injectFailure = false } = {}) {
@@ -66,6 +66,16 @@ export class Engine {
       try { return await operation(); }
       catch(e) {
         if(kind==='model'&&!e.usageRecorded) {m.calls.unknownUsageAttempts=(m.calls.unknownUsageAttempts||0)+1;await this.store.save(m);}
+        if(e.status===429 && this.providers.label==='live' && attempt<3) {
+          if(m.calls[kind]>=limit || m.calls.tokens>=this.limits.tokens)throw new BudgetReached();
+          const delay=Math.max(60000 * 2**(attempt-1),(Date.parse(e.retryAt)||0)-Date.now());
+          // Long provider cooldowns stay paused for manual review, never shorten them.
+          if(delay>120000)throw e;
+          await this.event(m,'recovery',`Provider rate limit; automatic retry ${attempt}/2 in ${Math.ceil(delay/1000)} seconds. Saved progress retained.`,{retryAt:new Date(Date.now()+delay).toISOString()});
+          await this.sleep(delay);
+          this.checkStop(m);
+          continue;
+        }
         if (!e.retryable || attempt===3) throw e;
         await this.event(m, 'recovery', `${kind === 'search' ? 'Research' : 'Reasoning'} request failed; bounded retry ${attempt}/2`, { controlled:!!e.controlled });
         await new Promise(resolve=>setTimeout(resolve, this.providers.label==='live' ? Math.min(500 * 2**attempt,4000) : 1));

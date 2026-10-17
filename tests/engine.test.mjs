@@ -127,16 +127,16 @@ test('repeated blocks increase persisted cooldown and retain provider quota diag
  let requests=0;
  const p=new LiveProviders({CRUSOE_MODEL:'fixture/model'},async()=>{requests++;return {ok:false,status:429,headers:{get:key=>key==='x-ratelimit-remaining-tokens'?'0':null}};});
  p.preflight=async()=>{};
- const {engine,store}=await setup(t,p);const m=await engine.create('Research this public company claim.');
+ const {engine,store}=await setup(t,p);engine.sleep=async()=>{};const m=await engine.create('Research this public company claim.');
  await engine.run(m.id);let d=await store.get(m.id);
- assert.equal(d.rateLimitBlocks,1);assert.equal(requests,1);
+ assert.equal(d.rateLimitBlocks,1);assert.equal(requests,3);
  assert.equal(d.events.at(-1).diagnostic.provider,'Crusoe');assert.equal(d.events.at(-1).diagnostic.operation,'reason');
  assert.equal(d.events.at(-1).diagnostic.rateLimits['x-ratelimit-remaining-tokens'],0);
  d.retryAt=new Date(0).toISOString();await store.save(d);const before=Date.now();
- await new Engine(store,p).run(m.id);d=await store.get(m.id);
- assert.equal(d.rateLimitBlocks,2);assert.ok(Date.parse(d.retryAt)>=before+120000);assert.equal(requests,2);
- await engine.run(m.id);assert.equal(requests,2);
- assert.equal(d.events.filter(e=>e.type==='provider_response').length,2);
+ await new Engine(store,p,{}, {sleep:async()=>{}}).run(m.id);d=await store.get(m.id);
+ assert.equal(d.rateLimitBlocks,2);assert.ok(Date.parse(d.retryAt)>=before+120000);assert.equal(requests,6);
+ await engine.run(m.id);assert.equal(requests,6);
+ assert.equal(d.events.filter(e=>e.type==='provider_response').length,6);
 });
 
 test('mixed search results admit only individually relevant official sources when requested',async t=>{
@@ -200,3 +200,4 @@ test('review timeouts preserve prior findings as an explicitly incomplete final 
  assert.match(d.report.finalizationReason,/bounded retries/);
  assert.ok(d.report.completionChecks.some(c=>c.label.includes('Final review')&&!c.passed));
 });
+
