@@ -59,6 +59,9 @@ export class Engine {
       }
     }
   }
+  responseRecorder(m) {
+    return diagnostic => this.event(m, 'provider_response', 'Provider HTTP response received', diagnostic);
+  }
   async reason(m, role, instruction, input) {
     let recorded = false;
     const record = async (usage, model) => {
@@ -69,7 +72,7 @@ export class Engine {
       m.calls.cachedTokens += Number(usage?.prompt_tokens_details?.cached_tokens)||0;
       await this.event(m,'usage','Provider response usage captured before answer validation',{provider:'Crusoe',model,usage});
     };
-    const result = await this.bounded(m, 'model', ()=>{recorded=false;return this.providers.reason(role,instruction,input,{onUsage:record});});
+    const result = await this.bounded(m, 'model', ()=>{recorded=false;return this.providers.reason(role,instruction,input,{onUsage:record,onResponse:this.responseRecorder(m)});});
     if(!recorded) await record(result.usage,result.model);
     await this.event(m,'provider',`${role} completed a reasoning step`,{provider:'Crusoe',model:result.model});
     this.checkStop(m);
@@ -91,7 +94,7 @@ export class Engine {
       delete m.retryAt;
       m.status='running'; delete m.error;
       await this.event(m,'started',m.events.length ? 'Resuming from saved progress' : 'Investigation started');
-      await this.providers.preflight();
+      await this.providers.preflight({onResponse:this.responseRecorder(m)});
       if(m.phase==='plan') {
         const plan=await this.reason(m,'coordinator',PLAN,{objective:m.objective});
         this.addTasks(m,validateTasks(plan.tasks)); m.phase='research';
@@ -106,7 +109,7 @@ export class Engine {
                 m.failureInjected=true; await this.store.save(m);
                 const e=new ProviderError('Controlled test: simulated transient search failure',true); e.controlled=true; throw e;
               }
-              return this.providers.search(task.query);
+              return this.providers.search(task.query,{onResponse:this.responseRecorder(m)});
             });
             task.capturedSources=results; await this.store.save(m);
             const specialist=await this.reason(m,'researcher',`${RULES} Check whether these results describe the organization and business activity intended in the full objective. A same-name company in a different industry is a mismatch. Return {"entityMatch":true|false,"summary":"brief evidence-based summary","gaps":["unanswered question"]}. entityMatch must be false if identity or relevance is uncertain. Maximum 180 words total. Cite URLs. Do not declare safety.`,{objective:m.objective,question:task.question,sources:results});
@@ -161,10 +164,12 @@ export class Engine {
     } catch(e) {
       if(m) {
         if(e.status===429) {
-          m.retryAt=e.retryAt || new Date(Date.now()+60000).toISOString();
+          m.rateLimitBlocks=(m.rateLimitBlocks||0)+1;
+          const backoff=60000 * 2 ** Math.min(m.rateLimitBlocks-1,4);
+          m.retryAt=new Date(Math.max(Date.now()+backoff,Date.parse(e.retryAt)||0)).toISOString();
           e.message=`Provider rate limit reached. Saved progress retained. Resume after ${m.retryAt}; no automatic retry will run.`;
         }
-        m.status=e instanceof StopRequested?'cancelled':'blocked';m.error=e.message;await this.event(m,m.status,e.message);}
+        m.status=e instanceof StopRequested?'cancelled':'blocked';m.error=e.message;await this.event(m,m.status,e.message,{...(e.diagnostic?{diagnostic:e.diagnostic}:{}),...(e.status===429?{rateLimitBlocks:m.rateLimitBlocks,retryAt:m.retryAt}:{})});}
       return m;
     } finally {this.active.delete(id);this.stops.delete(id);}
   }
