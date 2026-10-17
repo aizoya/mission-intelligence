@@ -46,3 +46,8 @@ Moved Prism artwork and report narration into the conditionally visible evidence
 ## Ergonomic layout pass — October 17
 
 Moved the investigation room into the activity column alongside the question composer on desktop, shortened the introductory hero and character area, added accessible sticky section links, and collapsed detailed workflow checks behind a visible pass-count summary. Evidence citations and unresolved questions remain available. Report navigation appears only when a saved report exists. No automatic scrolling or provider calls. Offline behavior checks are not a substitute for pending browser/device visual acceptance.
+
+
+## Founder screenshot correction — October 17
+
+Founder photos show the question column squeezed by intrinsic minimum sizing of the investigation content. Set both tracks to minmax(0, fraction), allow child shrink/wrapping, and stack below 1000px. Prism image fallback was visible: artwork installation remains separate from code pull. Screenshot evidence does not establish acceptance of the corrected layout; founder visual recheck required.
