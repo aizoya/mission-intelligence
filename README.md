@@ -6,6 +6,8 @@ Investigate before you commit. Local development MVP for Recursive Agents Hackat
 
 Requires Node 24. Run `npm ci`, copy `.env.example` to `.env`, then `npm run app`. Open http://127.0.0.1:3400. Configure provider keys privately. Live calls default to disabled; enabling them requires confirmed credits and an approved spending budget. Never commit keys or saved missions.
 
+Alternatively, before creating `.env`, run `npm run setup:local` in a private terminal. It hides key entry, creates `.env` with owner-only permissions, refuses to overwrite an existing file, and makes no provider requests. Run `npm run readiness` to check configuration without printing keys. Neither command enables live calls or proves a successful integration.
+
 ## Implemented
 
 Crusoe Chat Completions and You.com Search adapters; coordinator, researcher and challenger roles; conditional follow-up research; exact quotation/source checks; bounded transient retries; labeled failure injection; persisted mission checkpoints; customer stop control; five visible workflow completion checks; JSON report download. The separate eve tool invokes the same engine.
@@ -14,7 +16,7 @@ A completed workflow does not establish source truth, semantic entailment, sourc
 
 ## Verification and limits
 
-17 offline tests, TypeScript checking and eve build passed for the local implementation. Run `npm test`, `npm run typecheck` and `npm run build`. Fixtures are synthetic and are not displayed as live research. GitHub CI has been authored; its actual results must be checked.
+19 offline tests, TypeScript checking and eve build passed for the local implementation. Run `npm test`, `npm run typecheck` and `npm run build`. Fixtures are synthetic and are not displayed as live research. GitHub CI has been authored; its actual results must be checked.
 
 Successful live Crusoe and You.com calls, live recursion/recovery, mobile visual QA, deployment, production authentication/security and the submission video remain unverified. This is not a production service.
 
