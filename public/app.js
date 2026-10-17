@@ -4,7 +4,79 @@ const text=(tag,value)=>{const el=document.createElement(tag);el.textContent=val
 async function api(path,options){const r=await fetch(path,options);const data=await r.json();if(!r.ok)throw new Error(data.error||'Request failed');return data;}
 async function status(){try{const s=await api('/api/status');$('provider-status').textContent=`Crusoe key: ${s.crusoeConfigured?'configured':'missing'} · You.com key: ${s.youConfigured?'configured':'missing'} · Live calls: ${s.liveEnabled?'enabled':'disabled'}. Configuration is not proof of a successful integration.`;}catch(e){$('provider-status').textContent=e.message;}}
 function list(id,items){$(id).replaceChildren(...items.map(x=>text('li',x)));}
+let selectedAgent='grace';
+let taskSignature='';
+const agents={grace:{name:'Grace',role:'Your guide',description:'I coordinate the investigation and help you understand what the evidence supports.'},errands:{name:'Errands',role:'Evidence explorer',description:'I gather public sources and assess their relevance to your question.'},reviewer:{name:'Reviewer',role:'Evidence challenger',description:'I review captured evidence, check quotations, and identify gaps. A matched quote is not proof that a claim is true.'}};
+function teamView(m){
+ const active=m&&['queued','running'].includes(m.status);
+ const states={grace:'Ready',errands:'Ready',reviewer:'Ready'};
+ let working=null,message='Hi! What are we curious about today? Give me a question and we’ll explore it together.';
+ if(m){
+  if(active){
+   working=m.phase==='research'?'errands':m.phase==='verify'?'reviewer':'grace';
+   states.grace='Coordinating';states.errands='Waiting';states.reviewer='Waiting';
+   if(working==='grace'){states.grace='Planning';message='Let’s turn your question into a few focused investigations.';}
+   if(working==='errands'){states.errands='Exploring';message='Errands is following the sources. We’ll keep what fits your question and flag what doesn’t.';}
+   if(working==='reviewer'){states.errands='Research paused';states.reviewer='Reviewing';message='Let’s challenge what we found. The reviewer is checking the evidence and looking for gaps.';}
+  }else if(m.status==='blocked'){
+   Object.keys(states).forEach(k=>states[k]='Paused');
+   message='We’ve hit a blocker. Your progress is saved. '+(m.error||'Review the activity details before continuing.');
+   if(m.retryAt)message+=' Earliest manual retry: '+new Date(m.retryAt).toLocaleTimeString()+'. This is not a guarantee of provider availability.';
+  }else if(m.status==='cancelled'){
+   Object.keys(states).forEach(k=>states[k]='Stopped');message='We’ve stopped here. Your saved evidence is still available to review.';
+  }else{
+   Object.keys(states).forEach(k=>states[k]='At rest');
+   message=m.status==='complete'?'Your evidence brief is ready. Let’s review the findings and decide what to check next.':'We have a partial brief, with open questions. Let’s review those before making a decision.';
+  }
+ }
+ return {states,working,message,active:!!active};
+}
+function renderTeam(m){
+ const v=teamView(m);
+ $('team-stage').className='team-stage'+(v.active?' is-active':'');
+ $('room-mode').textContent=!m?'READY TO EXPLORE':m.mode==='live'?'LIVE PROVIDER MODE':'MODE: '+m.mode;
+ for(const key of Object.keys(agents)){
+  $('agent-'+key).className='agent-card'+(v.working===key?' agent-working':'')+(m?.status==='blocked'?' agent-paused':'');
+  $('agent-'+key).setAttribute('aria-pressed',String(selectedAgent===key));
+  $(key+'-state').textContent=v.states[key];
+ }
+ $('speaker').textContent=agents[selectedAgent].name.toUpperCase()+' / '+agents[selectedAgent].role.toUpperCase();
+ // Authored narration describes saved workflow state, never private model reasoning.
+ $('team-message').textContent=selectedAgent==='grace'?v.message:agents[selectedAgent].description;
+ const task=(m?.tasks||[]).find(t=>t.status==='running')||(m?.tasks||[]).find(t=>t.status==='pending');
+ $('agent-detail').textContent=selectedAgent==='errands'&&task?'Current assignment: '+task.question:selectedAgent==='reviewer'&&m?.report?`${m.report.findings.length} quoted findings in the current brief. Open the report to inspect each citation.`:m?'Your question: '+m.objective:'Select a teammate to see their role and current work.';
+ renderTasks(m);
+}
+function sourceLink(s){
+ const card=document.createElement('div');card.className='source-chip';
+ let valid=false;try{valid=['https:','http:'].includes(new URL(s.url).protocol);}catch{}
+ if(valid){const a=text('a',s.title||s.url);a.href=s.url;a.target='_blank';a.rel='noopener noreferrer';card.append(a);}else card.append(text('span',s.title||'Source URL unavailable'));
+ card.append(text('small',s.eligible===false?'Excluded from report evidence':s.assessment?'Included after model relevance assessment · not independent authentication':'Captured source · inspect before relying on it'));
+ return card;
+}
+function renderTasks(m){
+ const signature=JSON.stringify([m?.id,m?.status,m?.tasks,m?.sources]);if(signature===taskSignature)return;taskSignature=signature;
+ const cards=(m?.tasks||[]).map(t=>{
+  const previous=document.getElementById('task-'+t.id);const d=document.createElement('details');d.className='task-card';d.id='task-'+t.id;d.open=previous?.open||false;
+  const summary=text('summary',t.question);const state=t.status==='running'&&!['queued','running'].includes(m.status)?'PAUSED':(t.status||'pending').toUpperCase();
+  const badge=text('span',`ERRANDS / ${state}${t.parent?' / FOLLOW-UP':''}`);badge.className='task-state';summary.prepend(badge);d.append(summary);
+  if(t.summary)d.append(text('p',t.summary));if(t.error)d.append(text('p',t.error));
+  const accepted=(m.sources||[]).filter(s=>s.taskId===t.id);
+  d.append(text('p',`${accepted.length} included sources · ${(t.rejectedSources||[]).length} excluded sources`));
+  accepted.forEach(s=>d.append(sourceLink(s)));
+  if(t.rejectedSources?.length){const excluded=document.createElement('details');excluded.append(text('summary','Inspect excluded sources'));t.rejectedSources.forEach(s=>excluded.append(sourceLink({...s,eligible:false})));d.append(excluded);}
+  return d;
+ });
+ if(!cards.length)cards.push(text('p',m?'Research assignments will appear after planning completes.':'Your team’s assignments and source trail will appear here.'));
+ $('task-board').replaceChildren(...cards);
+}
+for(const key of Object.keys(agents))$('agent-'+key).addEventListener('click',()=>{selectedAgent=key;renderTeam(current);});
+let motionPaused=false;
+$('motion-toggle').addEventListener('click',()=>{motionPaused=!motionPaused;document.querySelector('.team-room').classList.toggle('motion-paused',motionPaused);$('motion-toggle').setAttribute('aria-pressed',String(motionPaused));$('motion-toggle').textContent=motionPaused?'Allow movement':'Pause movement';});
+renderTeam(null);
+
 function render(m){
+ renderTeam(m);
  current=m;$('download').hidden=false;$('state').textContent=m.status.replaceAll('_',' ').toUpperCase();
  $('start').disabled=['queued','running'].includes(m.status);$('resume').hidden=m.status!=='blocked';
  $('stop').hidden=!['queued','running'].includes(m.status);$('stop').disabled=false;
@@ -17,7 +89,7 @@ function render(m){
  if(m.report){$('findings').replaceChildren(...m.report.findings.map(f=>{const d=document.createElement('article');d.className='finding';d.append(text('p',f.claim),text('blockquote',f.quote));const a=text('a',f.url);a.href=f.url;a.target='_blank';a.rel='noopener noreferrer';d.append(a,text('small',f.evidenceStatus));return d;}));list('unknowns',m.report.unknowns.length?m.report.unknowns:['No unresolved questions reported by the model. This is not a guarantee of safety.']);list('next-steps',m.report.nextSteps);$('limitations').textContent=m.report.limitations.join(' ');}
  if(!['running','queued'].includes(m.status)){clearInterval(polling);polling=null;}
 }
-async function load(id){try{render(await api(`/api/missions/${id}`));}catch(e){$('error').textContent=e.message;clearInterval(polling);$('start').disabled=false;}}
+async function load(id){try{render(await api(`/api/missions/${id}`));}catch(e){$('error').textContent=e.message;clearInterval(polling);$('start').disabled=false;$('team-stage').className='team-stage';for(const key of Object.keys(agents)){$('agent-'+key).className='agent-card agent-paused';$(key+'-state').textContent='Connection lost';}$('team-message').textContent='We lost contact with the local app. The display is paused; server activity is unknown. Reconnect before retrying.';}}
 function watch(id){localStorage.setItem('mi_last_mission',id);clearInterval(polling);polling=setInterval(()=>load(id),1400);load(id);}
 $('mission-form').addEventListener('submit',async e=>{e.preventDefault();$('error').textContent='';$('start').disabled=true;try{const m=await api('/api/missions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({objective:$('objective').value,publicDataConsent:$('consent').checked,injectFailure:$('inject').checked})});watch(m.id);}catch(e){$('error').textContent=e.message;$('start').disabled=false;}});
 $('resume').addEventListener('click',async()=>{if(!current)return;try{await api(`/api/missions/${current.id}/resume`,{method:'POST'});watch(current.id);}catch(e){$('error').textContent=e.message;}});
@@ -26,4 +98,4 @@ $('download').addEventListener('click',()=>{if(!current)return;const blob=new Bl
 status();const last=localStorage.getItem('mi_last_mission');if(last)watch(last);
 
 // Optional company identity images are private and may be absent.
-for(const img of document.querySelectorAll(".brand img,.mascots img")){const hide=()=>{if(img.closest("figure"))img.closest("figure").hidden=true;else img.hidden=true;};img.addEventListener("error",hide);if(img.complete&&img.naturalWidth===0)hide();}
+for(const img of document.querySelectorAll(".brand img,.avatar img")){const hide=()=>{if(img.closest("figure"))img.closest("figure").hidden=true;else {img.hidden=true;const fallback=img.parentElement?.querySelector('.asset-fallback');if(fallback)fallback.hidden=false;}};img.addEventListener("error",hide);if(img.complete&&img.naturalWidth===0)hide();}
