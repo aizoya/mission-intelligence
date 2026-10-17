@@ -7,7 +7,7 @@ export function configuration(crusoe,you) {
   for(const key of [crusoe,you]) {
     if(typeof key!=='string'||key.length<8||key.length>1000||!/^[A-Za-z0-9_.$:+/=-]+$/.test(key))throw new Error('Key format rejected; use the original provider key without whitespace or quotes.');
   }
-  return `CRUSOE_API_KEY='${crusoe}'\nYOU_API_KEY='${you}'\nCRUSOE_MODEL=nvidia/Nemotron-3-Super-120B-A12B\nCRUSOE_WORKER_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b\nALLOW_LIVE_CALLS=false\nPORT=3400\nMAX_MODEL_CALLS=14\nMAX_SEARCH_CALLS=8\nMAX_TOTAL_TOKENS=60000\n`;
+  return `CRUSOE_API_KEY='${crusoe}'\nYOU_API_KEY='${you}'\nCRUSOE_MODEL=nvidia/NVIDIA-Nemotron-3-Super-120B-A12B\nCRUSOE_WORKER_MODEL=nvidia/Nemotron-3.5-Lightning-30B-A3B\nALLOW_LIVE_CALLS=false\nPORT=3400\nMAX_MODEL_CALLS=14\nMAX_SEARCH_CALLS=8\nMAX_TOTAL_TOKENS=60000\n`;
 }
 
 export async function saveConfiguration(path,content) {

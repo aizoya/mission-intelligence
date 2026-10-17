@@ -41,18 +41,24 @@ export class LiveProviders {
     }
   }
   model(role) {
-    return role === 'researcher' ? (this.env.CRUSOE_WORKER_MODEL || this.env.CRUSOE_MODEL || 'nvidia/Nemotron-3-Super-120B-A12B') : (this.env.CRUSOE_MODEL || 'nvidia/Nemotron-3-Super-120B-A12B');
+    return role === 'researcher' ? (this.env.CRUSOE_WORKER_MODEL || this.env.CRUSOE_MODEL || 'nvidia/NVIDIA-Nemotron-3-Super-120B-A12B') : (this.env.CRUSOE_MODEL || 'nvidia/NVIDIA-Nemotron-3-Super-120B-A12B');
   }
-  async reason(role, system, payload) {
+  async reason(role, system, payload, { onUsage } = {}) {
     const model = this.model(role);
     const meta = this.catalog?.find(x => x.id === model);
-    const body = { model, messages: [{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(payload) }], max_tokens: 2500 };
+    const body = { model, messages: [{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(payload) }], max_tokens: 8192 };
     if (meta?.supported_parameters?.includes('response_format')) body.response_format = { type: 'json_object' };
     const result = await requestJSON('https://api.inference.crusoecloud.com/v1/chat/completions', {
       method: 'POST', headers: { Authorization: `Bearer ${this.env.CRUSOE_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     }, this.fetcher);
-    if (result.choices?.[0]?.finish_reason === 'length') throw new ProviderError('Model output truncated; task requires a smaller scope');
-    return { value: parseJSON(result.choices?.[0]?.message?.content), model, usage: result.usage || {} };
+    if (onUsage) await onUsage(result.usage || {}, model);
+    try {
+      if (result.choices?.[0]?.finish_reason === 'length') throw new ProviderError('Model output truncated; saved evidence remains available. Narrow the scope before another run.');
+      return { value: parseJSON(result.choices?.[0]?.message?.content), model, usage: result.usage || {} };
+    } catch (error) {
+      error.usageRecorded = !!onUsage;
+      throw error;
+    }
   }
   async search(query) {
     const result = await requestJSON('https://ydc-index.io/v1/search', {

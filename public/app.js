@@ -5,12 +5,12 @@ async function api(path,options){const r=await fetch(path,options);const data=aw
 async function status(){try{const s=await api('/api/status');$('provider-status').textContent=`Crusoe key: ${s.crusoeConfigured?'configured':'missing'} · You.com key: ${s.youConfigured?'configured':'missing'} · Live calls: ${s.liveEnabled?'enabled':'disabled'}. Configuration is not proof of a successful integration.`;}catch(e){$('provider-status').textContent=e.message;}}
 function list(id,items){$(id).replaceChildren(...items.map(x=>text('li',x)));}
 function render(m){
- current=m;$('state').textContent=m.status.replaceAll('_',' ').toUpperCase();
+ current=m;$('download').hidden=false;$('state').textContent=m.status.replaceAll('_',' ').toUpperCase();
  $('start').disabled=['queued','running'].includes(m.status);$('resume').hidden=!['blocked','running','queued'].includes(m.status);
  $('stop').hidden=!['queued','running'].includes(m.status);$('stop').disabled=false;
  $('mission-note').textContent=`Mission ${m.id.slice(0,8)} · ${m.mode} provider mode · saved ${m.updatedAt?new Date(m.updatedAt).toLocaleTimeString():'now'}`;
  $('search-count').textContent=m.calls.search;$('model-count').textContent=m.calls.model;$('source-count').textContent=m.sources.length;
- $('timeline').replaceChildren(...m.events.map(e=>{const li=text('li',e.message);li.className=`event-${e.type}`;li.prepend(text('time',`${new Date(e.at).toLocaleTimeString()} · ${e.type}${e.controlled?' · CONTROLLED TEST FAILURE':''}`));if(e.model)li.append(text('div',e.model));return li;}));
+ $('timeline').replaceChildren(...m.events.map(e=>{const li=text('li',e.message);li.className=`event-${e.type}`;li.prepend(text('time',`${new Date(e.at).toLocaleTimeString()} · ${e.type}${e.controlled?' · CONTROLLED TEST FAILURE':''}`));if(e.model)li.append(text('div',e.model));if(e.error)li.append(text('div',e.error));return li;}));
  $('error').textContent=m.error||'';
  $('report').hidden=!m.report;
  if(m.report)list('completion-checks',(m.report.completionChecks||[]).map(c=>`${c.passed?'PASS':'NEEDS REVIEW'} — ${c.label}`));
@@ -22,7 +22,7 @@ function watch(id){localStorage.setItem('mi_last_mission',id);clearInterval(poll
 $('mission-form').addEventListener('submit',async e=>{e.preventDefault();$('error').textContent='';$('start').disabled=true;try{const m=await api('/api/missions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({objective:$('objective').value,publicDataConsent:$('consent').checked,injectFailure:$('inject').checked})});watch(m.id);}catch(e){$('error').textContent=e.message;$('start').disabled=false;}});
 $('resume').addEventListener('click',async()=>{if(!current)return;try{await api(`/api/missions/${current.id}/resume`,{method:'POST'});watch(current.id);}catch(e){$('error').textContent=e.message;}});
 $('stop').addEventListener('click',async()=>{if(!current)return;$('stop').disabled=true;try{await api(`/api/missions/${current.id}/stop`,{method:'POST'});$('mission-note').textContent='Stop requested. An in-flight provider request may finish and incur usage; no subsequent request will begin.';}catch(e){$('error').textContent=e.message;}});
-$('download').addEventListener('click',()=>{if(!current?.report)return;const blob=new Blob([JSON.stringify(current,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`mission-${current.id}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+$('download').addEventListener('click',()=>{if(!current)return;const blob=new Blob([JSON.stringify(current,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`mission-${current.id}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
 status();const last=localStorage.getItem('mi_last_mission');if(last)watch(last);
 
 // Optional company identity images are private and may be absent.

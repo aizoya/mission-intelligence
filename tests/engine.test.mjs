@@ -70,3 +70,24 @@ test('completion requires every published workflow check to pass',async t=>{
  assert.ok(d.report.completionChecks.every(x=>x.passed));
  assert.ok(d.report.limitations.some(x=>x.includes('not truth')));
 });
+test('truncated provider response usage is persisted before rejection',async t=>{
+ const p=new LiveProviders({CRUSOE_MODEL:'fixture/model'},async()=>({ok:true,json:async()=>({choices:[{finish_reason:'length',message:{content:'incomplete'}}],usage:{total_tokens:8192}})}));
+ p.preflight=async()=>{};
+ const {engine,store}=await setup(t,p);
+ const m=await engine.create('Research this proposed product market.');
+ await engine.run(m.id);const d=await store.get(m.id);
+ assert.equal(d.status,'blocked');assert.equal(d.calls.tokens,8192);assert.equal(d.calls.model,1);assert.equal(d.calls.unknownUsageAttempts||0,0);
+});
+test('malformed answers count usage across bounded retries',async t=>{
+ const p=new LiveProviders({CRUSOE_MODEL:'fixture/model'},async()=>({ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:'not JSON'}}],usage:{total_tokens:100}})}));
+ p.label='offline-fixture';p.preflight=async()=>{};
+ const {engine,store}=await setup(t,p);const m=await engine.create('Research this proposed product market.');
+ await engine.run(m.id);const d=await store.get(m.id);
+ assert.equal(d.status,'blocked');assert.equal(d.calls.tokens,300);assert.equal(d.calls.model,3);assert.equal(d.calls.unknownUsageAttempts||0,0);
+});
+test('unmetered failed requests are explicitly marked unknown',async t=>{
+ const p=new FixtureProviders();p.reason=async()=>{throw new ProviderError('Timeout',true);};
+ const {engine,store}=await setup(t,p);const m=await engine.create('Research this proposed product market.');
+ await engine.run(m.id);const d=await store.get(m.id);
+ assert.equal(d.status,'blocked');assert.equal(d.calls.unknownUsageAttempts,3);assert.equal(d.calls.tokens,0);
+});
